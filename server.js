@@ -1,6 +1,19 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
+
+// Persistent state file — Railway volume at /data, or local fallback
+const STATE_DIR = process.env.STATE_DIR || (fs.existsSync('/data') ? '/data' : path.join(__dirname, 'data'));
+const STATE_FILE = path.join(STATE_DIR, 'state.json');
+if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true });
+
+function readState() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return null; }
+}
+function writeState(data) {
+  fs.writeFileSync(STATE_FILE, JSON.stringify(data), 'utf8');
+}
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -8,6 +21,22 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname)));
+
+// ---- Persistent state API ----
+app.get('/api/state', (req, res) => {
+  const state = readState();
+  if (!state) return res.json({ ok: false, state: null });
+  res.json({ ok: true, state });
+});
+
+app.post('/api/state', (req, res) => {
+  try {
+    const { state } = req.body || {};
+    if (!state) return res.json({ ok: false, error: 'Missing state' });
+    writeState(state);
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
 
 async function tgSendText(token, chatId, threadId, text) {
   const body = { chat_id: chatId, text };

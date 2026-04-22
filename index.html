@@ -148,18 +148,57 @@ let selectedFile = null, emptyRemoved = false;
 // groups = [{id, name, enabled, chats:[{chatId,threadId}]}]
 let groups = [];
 
-function loadGroups() {
-  try { groups = JSON.parse(localStorage.getItem('bc_groups') || '[]'); } catch { groups = []; }
-  if (!groups.length) {
-    groups = [
-      { id: uid(), name: 'Group 1', enabled: true,  chats: [{ chatId: '', threadId: '' }] },
-      { id: uid(), name: 'Group 2', enabled: true,  chats: [{ chatId: '', threadId: '' }] },
-      { id: uid(), name: 'Group 3', enabled: false, chats: [{ chatId: '', threadId: '' }] },
-    ];
-  }
+function defaultGroups() {
+  return [
+    { id: uid(), name: 'Group 1', enabled: true,  chats: [{ chatId: '', threadId: '' }] },
+    { id: uid(), name: 'Group 2', enabled: true,  chats: [{ chatId: '', threadId: '' }] },
+    { id: uid(), name: 'Group 3', enabled: false, chats: [{ chatId: '', threadId: '' }] },
+  ];
 }
 
-function saveGroups() { localStorage.setItem('bc_groups', JSON.stringify(groups)); }
+function loadGroups() {
+  try { groups = JSON.parse(localStorage.getItem('bc_groups') || '[]'); } catch { groups = []; }
+  if (!groups.length) groups = defaultGroups();
+}
+
+function saveGroups() {
+  localStorage.setItem('bc_groups', JSON.stringify(groups));
+  syncToServer();
+}
+
+let syncTimer = null;
+function syncToServer() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    try {
+      const token = $('botToken').value.trim();
+      await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: { groups, token } })
+      });
+    } catch {}
+  }, 500);
+}
+
+async function loadFromServer() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) return;
+    const { ok, state } = await res.json();
+    if (!ok || !state) return;
+    if (state.groups && state.groups.length) {
+      groups = state.groups;
+      localStorage.setItem('bc_groups', JSON.stringify(groups));
+    }
+    if (state.token) {
+      $('botToken').value = state.token;
+      localStorage.setItem('bc_token', state.token);
+    }
+    renderGroups();
+    toast('Synced from server ✅');
+  } catch {}
+}
 function uid() { return Math.random().toString(36).slice(2,8); }
 
 function renderGroups() {
@@ -265,10 +304,14 @@ function getTargets() {
 
 // ---- Token ----
 $('botToken').value = localStorage.getItem('bc_token') || '';
-$('botToken').addEventListener('input', () => localStorage.setItem('bc_token', $('botToken').value.trim()));
+$('botToken').addEventListener('input', () => {
+  localStorage.setItem('bc_token', $('botToken').value.trim());
+  syncToServer();
+});
 
 // ---- Init ----
 loadGroups(); renderGroups();
+loadFromServer();
 window.addEventListener('load', () => setTimeout(() => input.focus(), 300));
 
 input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; });
