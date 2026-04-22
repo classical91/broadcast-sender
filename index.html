@@ -278,12 +278,17 @@ function addChat(gid) {
 }
 function removeChat(gid, ci) {
   const g = groups.find(x => x.id === gid); if (!g) return;
+  const label = g.chats[ci]?.chatId || 'this chat';
+  if (!confirm('Remove ' + label + ' from ' + g.name + '?')) return;
   if (g.chats.length <= 1) { g.chats[0] = { chatId: '', threadId: '' }; }
   else g.chats.splice(ci, 1);
   saveGroups(); renderGroups();
 }
 function removeGroup(gid) {
   if (groups.length <= 1) return toast('Need at least one group');
+  const g = groups.find(x => x.id === gid);
+  const label = g ? g.name : 'this group';
+  if (!confirm('Delete group "' + label + '" and all its channels?')) return;
   groups = groups.filter(x => x.id !== gid); saveGroups(); renderGroups();
 }
 function addGroup() {
